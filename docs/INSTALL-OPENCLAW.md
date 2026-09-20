@@ -58,15 +58,17 @@ handoff and initial sensor catalog.
 
 ## 4. Install after approval
 
-Create the unprivileged account, directories and files with explicit ownership
-and modes. Copy `deploy/bob-icu-client.service` from the verified release. Put
-the secret alone on one line in `client.secret`; do not interpolate it into the
-JSON configuration.
+Create the unprivileged account without populating its state directory from
+`/etc/skel` (for example with `useradd --system --no-create-home`). Then create
+the directories and files with explicit ownership and modes. Copy
+`deploy/bob-icu-client.service` from the verified release. Put the secret alone
+on one line in `client.secret`; do not interpolate it into the JSON
+configuration.
 
 Before enabling the service:
 
 ```bash
-/usr/local/bin/bob-icu-client \
+sudo -u bob-icu-client /usr/local/bin/bob-icu-client \
   -config /etc/bob-icu/client.json -check-config
 systemd-analyze verify /etc/systemd/system/bob-icu-client.service
 ```
@@ -82,6 +84,8 @@ journalctl -u bob-icu-client.service --since=-5min --no-pager
 
 Never print the secret. A successful client start is not sufficient proof;
 verify on the BOB ICU server that the manifest, heartbeat and readings arrived.
+The configuration check must run as the service account: it opens and migrates
+the SQLite database and deliberately sets its mode to `0600`.
 
 ## 5. Upgrade and rollback
 
