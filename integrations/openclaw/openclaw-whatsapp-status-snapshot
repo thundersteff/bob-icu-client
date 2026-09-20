@@ -47,4 +47,3 @@ jq -e \
 
 chmod 0644 "$snapshot_file"
 mv -f "$snapshot_file" "$output_file"
-

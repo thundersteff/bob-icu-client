@@ -33,4 +33,3 @@ value="$(jq -r '
 
 message="$(jq -r '"account=" + .account_id + " connected=" + (.connected|tostring) + " linked=" + (.linked|tostring) + " running=" + (.running|tostring) + " health=" + .health_state + " lifecycle=" + .lifecycle' <<<"$account")"
 jq -nc --arg value "$value" --arg message "$message" '{value:$value,message:$message}'
-

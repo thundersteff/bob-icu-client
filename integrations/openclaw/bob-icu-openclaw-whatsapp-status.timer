@@ -10,4 +10,3 @@ Unit=bob-icu-openclaw-whatsapp-status.service
 
 [Install]
 WantedBy=timers.target
-
