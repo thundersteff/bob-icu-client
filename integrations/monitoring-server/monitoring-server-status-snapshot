@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+output_file="${1:-/run/bob-icu-monitoring-status/status.json}"
+database_file="${2:-/var/lib/monitoring-ingest/monitoring.sqlite3}"
+ui_url="${3:-https://icu.bobbot.de/api/admin/status}"
+tls_host="${4:-icu.bobbot.de}"
+
+output_dir="$(dirname "$output_file")"
+mkdir -p "$output_dir"
+snapshot_file="$(mktemp "$output_dir/.monitoring-status.XXXXXX")"
+trap 'rm -f "$snapshot_file"' EXIT
+
+now="$(date +%s)"
+
+service_state="$(systemctl is-active monitoring-ingest.service 2>/dev/null || true)"
+if [[ "$service_state" == "active" ]]; then
+  receiver_value="healthy"
+else
+  receiver_value="critical"
+fi
+
+ssh_state="$(systemctl is-active ssh.service 2>/dev/null || true)"
+if [[ "$ssh_state" == "active" ]]; then
+  ssh_value="healthy"
+else
+  ssh_value="critical"
+fi
+
+ntp_state="$(timedatectl show --property=NTPSynchronized --value 2>/dev/null || true)"
+if [[ "$ntp_state" == "yes" ]]; then
+  ntp_value="healthy"
+else
+  ntp_value="critical"
+fi
+
+database_check="$(timeout 20s sqlite3 -readonly "$database_file" 'PRAGMA quick_check(1);' 2>/dev/null || true)"
+if [[ "$database_check" == "ok" ]]; then
+  database_value="healthy"
+else
+  database_value="critical"
+  database_check="${database_check:-unavailable}"
+fi
+
+database_bytes=0
+for candidate in "$database_file" "$database_file-wal" "$database_file-shm"; do
+  if [[ -f "$candidate" ]]; then
+    size="$(stat -c %s "$candidate" 2>/dev/null || echo 0)"
+    database_bytes=$(( database_bytes + size ))
+  fi
+done
+database_megabytes="$(awk -v bytes="$database_bytes" 'BEGIN { printf "%.2f", bytes / 1048576 }')"
+
+ui_body="$(mktemp "$output_dir/.monitoring-ui.XXXXXX")"
+trap 'rm -f "$snapshot_file" "$ui_body"' EXIT
+ui_code="$(timeout 20s curl --silent --show-error --output "$ui_body" --write-out '%{http_code}' "$ui_url" 2>/dev/null || true)"
+if [[ "$ui_code" == "200" ]] && jq -e '.configured == true' "$ui_body" >/dev/null 2>&1; then
+  https_value="healthy"
+else
+  https_value="critical"
+fi
+
+certificate_days=-1
+certificate_not_after=""
+if certificate_not_after="$(timeout 15s openssl s_client -connect "${tls_host}:443" -servername "$tls_host" </dev/null 2>/dev/null | openssl x509 -noout -enddate 2>/dev/null | cut -d= -f2-)" && [[ -n "$certificate_not_after" ]]; then
+  expiry_epoch="$(date -d "$certificate_not_after" +%s 2>/dev/null || echo 0)"
+  if (( expiry_epoch > now )); then
+    certificate_days=$(( (expiry_epoch - now) / 86400 ))
+  fi
+fi
+
+jq -n \
+  --argjson generated_at_epoch "$now" \
+  --arg receiver_value "$receiver_value" \
+  --arg service_state "${service_state:-unknown}" \
+  --arg database_value "$database_value" \
+  --arg database_check "$database_check" \
+  --argjson database_megabytes "$database_megabytes" \
+  --arg https_value "$https_value" \
+  --arg ui_code "${ui_code:-000}" \
+  --argjson certificate_days "$certificate_days" \
+  --arg certificate_not_after "${certificate_not_after:-unknown}" \
+  --arg ssh_value "$ssh_value" \
+  --arg ssh_state "${ssh_state:-unknown}" \
+  --arg ntp_value "$ntp_value" \
+  --arg ntp_state "${ntp_state:-unknown}" '
+    {
+      schema: "bob-icu.monitoring-server-status.v1",
+      generated_at_epoch: $generated_at_epoch,
+      sensors: {
+        receiver_state: {value: $receiver_value, message: ("systemd=" + $service_state)},
+        database_state: {value: $database_value, message: ("quick_check=" + $database_check)},
+        database_size_mb: {value: $database_megabytes, message: "SQLite including WAL/SHM"},
+        https_state: {value: $https_value, message: ("https_status=" + $ui_code)},
+        certificate_days_left: {value: $certificate_days, message: ("not_after=" + $certificate_not_after)},
+        ssh_state: {value: $ssh_value, message: ("systemd=" + $ssh_state)},
+        ntp_state: {value: $ntp_value, message: ("synchronized=" + $ntp_state)}
+      }
+    }
+  ' >"$snapshot_file"
+
+chmod 0644 "$snapshot_file"
+mv -f "$snapshot_file" "$output_file"

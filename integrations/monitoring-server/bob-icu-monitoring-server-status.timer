@@ -1,0 +1,12 @@
+[Unit]
+Description=Refresh BOB ICU monitoring-server status every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Persistent=true
+Unit=bob-icu-monitoring-server-status.service
+
+[Install]
+WantedBy=timers.target

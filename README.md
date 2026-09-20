@@ -31,6 +31,10 @@ the external-command contract are documented in
 The optional, privilege-separated OpenClaw WhatsApp health integration is
 documented in [`docs/OPENCLAW-WHATSAPP.md`](docs/OPENCLAW-WHATSAPP.md).
 
+The privilege-separated integration for enrolling the BOB ICU monitoring VPS
+itself is documented in
+[`docs/MONITORING-SERVER.md`](docs/MONITORING-SERVER.md).
+
 Release binaries are published for Linux `amd64` and `arm64`. Every release
 contains SHA-256 checksums and an Ed25519 signature over the checksum file.
 

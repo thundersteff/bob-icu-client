@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+snapshot_file="${1:?snapshot path required}"
+sensor_id="${2:?sensor id required}"
+max_age_seconds="${3:-180}"
+
+if [[ ! "$max_age_seconds" =~ ^[0-9]+$ ]] || (( max_age_seconds < 1 )); then
+  echo "invalid max age" >&2
+  exit 2
+fi
+if [[ ! -r "$snapshot_file" ]]; then
+  echo "snapshot is not readable" >&2
+  exit 1
+fi
+
+generated_at="$(jq -er '.generated_at_epoch | numbers' "$snapshot_file")"
+age=$(( $(date +%s) - generated_at ))
+if (( age < 0 || age > max_age_seconds )); then
+  echo "snapshot is stale: ${age}s" >&2
+  exit 1
+fi
+
+jq -ec --arg sensor_id "$sensor_id" '
+  .sensors[$sensor_id]
+  | select(type == "object" and has("value") and (.message | type == "string"))
+  | {value, message}
+' "$snapshot_file"

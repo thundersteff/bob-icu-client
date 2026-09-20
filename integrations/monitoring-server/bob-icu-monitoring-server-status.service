@@ -1,0 +1,29 @@
+[Unit]
+Description=BOB ICU sanitized monitoring-server status snapshot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=monitoring-ingest
+Group=monitoring-ingest
+RuntimeDirectory=bob-icu-monitoring-status
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+ExecStart=/usr/local/libexec/bob-icu/monitoring-server-status-snapshot /run/bob-icu-monitoring-status/status.json /var/lib/monitoring-ingest/monitoring.sqlite3 https://icu.bobbot.de/api/admin/status icu.bobbot.de
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadOnlyPaths=/var/lib/monitoring-ingest
+UMask=0022
