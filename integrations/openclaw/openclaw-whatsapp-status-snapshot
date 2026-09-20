@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mapping_file="${1:-/etc/bob-icu/openclaw-whatsapp-accounts.json}"
+output_file="${2:-/run/bob-icu-openclaw-status/whatsapp.json}"
+openclaw_bin="${OPENCLAW_BIN:-/home/bar/.npm-global/bin/openclaw}"
+
+if [[ ! -r "$mapping_file" ]]; then
+  echo "mapping file is not readable: $mapping_file" >&2
+  exit 1
+fi
+
+output_dir="$(dirname "$output_file")"
+mkdir -p "$output_dir"
+status_file="$(mktemp "$output_dir/.whatsapp-status.XXXXXX")"
+snapshot_file="$(mktemp "$output_dir/.whatsapp-snapshot.XXXXXX")"
+trap 'rm -f "$status_file" "$snapshot_file"' EXIT
+
+timeout 20s "$openclaw_bin" channels status --channel whatsapp --json >"$status_file"
+
+jq -e \
+  --argjson generated_at_epoch "$(date +%s)" \
+  --slurpfile mapping "$mapping_file" '
+    ($mapping[0].accounts // []) as $definitions
+    | (.channelAccounts.whatsapp // []) as $statuses
+    | {
+        schema: "bob-icu.openclaw-whatsapp-status.v1",
+        generated_at_epoch: $generated_at_epoch,
+        accounts: ($definitions | map(
+          . as $definition
+          | ($statuses | map(select(.accountId == $definition.account_id)) | first) as $status
+          | {
+              account_id: $definition.account_id,
+              e164: $definition.e164,
+              display_name: $definition.display_name,
+              enabled: ($status.enabled // false),
+              configured: ($status.configured // false),
+              linked: ($status.linked // false),
+              running: ($status.running // false),
+              connected: ($status.connected // false),
+              health_state: ($status.healthState // "unknown"),
+              lifecycle: ($status.lifecycle // "unknown")
+            }
+        ))
+      }
+  ' "$status_file" >"$snapshot_file"
+
+chmod 0644 "$snapshot_file"
+mv -f "$snapshot_file" "$output_file"
+

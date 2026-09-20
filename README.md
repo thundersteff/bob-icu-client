@@ -28,6 +28,9 @@ The supported installation path is documented in
 the external-command contract are documented in
 [`docs/SENSORS.md`](docs/SENSORS.md).
 
+The optional, privilege-separated OpenClaw WhatsApp health integration is
+documented in [`docs/OPENCLAW-WHATSAPP.md`](docs/OPENCLAW-WHATSAPP.md).
+
 Release binaries are published for Linux `amd64` and `arm64`. Every release
 contains SHA-256 checksums and an Ed25519 signature over the checksum file.
 

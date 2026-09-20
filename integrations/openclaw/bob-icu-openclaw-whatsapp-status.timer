@@ -1,0 +1,13 @@
+[Unit]
+Description=Refresh BOB ICU OpenClaw WhatsApp status every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Persistent=true
+Unit=bob-icu-openclaw-whatsapp-status.service
+
+[Install]
+WantedBy=timers.target
+

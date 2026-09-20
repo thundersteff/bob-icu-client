@@ -1,0 +1,10 @@
+{
+  "accounts": [
+    {
+      "account_id": "default",
+      "e164": "+491234567890",
+      "display_name": "Primary WhatsApp"
+    }
+  ]
+}
+

@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+snapshot_file="${1:?snapshot path required}"
+account_id="${2:?account id required}"
+max_age_seconds="${3:-120}"
+
+if [[ ! "$max_age_seconds" =~ ^[0-9]+$ ]] || (( max_age_seconds < 1 )); then
+  echo "invalid max age" >&2
+  exit 2
+fi
+if [[ ! -r "$snapshot_file" ]]; then
+  echo "snapshot is not readable" >&2
+  exit 1
+fi
+
+generated_at="$(jq -er '.generated_at_epoch | numbers' "$snapshot_file")"
+age=$(( $(date +%s) - generated_at ))
+if (( age < 0 || age > max_age_seconds )); then
+  echo "snapshot is stale: ${age}s" >&2
+  exit 1
+fi
+
+account="$(jq -ec --arg account_id "$account_id" '.accounts[] | select(.account_id == $account_id)' "$snapshot_file")"
+
+value="$(jq -r '
+  if .enabled == false then "disabled"
+  elif .linked == true and .running == true and .connected == true and .health_state == "healthy" and .lifecycle == "ready" then "healthy"
+  elif .linked == false or .connected == false then "disconnected"
+  else "degraded"
+  end
+' <<<"$account")"
+
+message="$(jq -r '"account=" + .account_id + " connected=" + (.connected|tostring) + " linked=" + (.linked|tostring) + " running=" + (.running|tostring) + " health=" + .health_state + " lifecycle=" + .lifecycle' <<<"$account")"
+jq -nc --arg value "$value" --arg message "$message" '{value:$value,message:$message}'
+
