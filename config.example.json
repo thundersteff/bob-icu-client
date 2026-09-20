@@ -1,0 +1,27 @@
+{
+  "endpoint": "https://monitor.bobbot.de",
+  "source_id": "example-host",
+  "secret_file": "/etc/bob-icu/client.secret",
+  "state_database": "/var/lib/bob-icu-client/client.sqlite3",
+  "heartbeat_interval_seconds": 60,
+  "request_timeout_seconds": 20,
+  "max_queue_items": 10000,
+  "max_parallel_sensors": 4,
+  "services": [
+    {
+      "service_id": "host",
+      "display_name": "Host",
+      "sensors": [
+        {
+          "sensor_id": "uptime_seconds",
+          "display_name": "Uptime",
+          "value_type": "number",
+          "unit": "seconds",
+          "interval_seconds": 60,
+          "timeout_seconds": 5,
+          "builtin": "host.uptime_seconds"
+        }
+      ]
+    }
+  ]
+}
