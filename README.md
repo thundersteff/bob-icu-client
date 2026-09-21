@@ -34,6 +34,10 @@ Linux patients should use the versioned standard packages documented in
 consistent catalog across installations without downloading mutable sensor
 definitions at runtime.
 
+Per-job cron success monitoring is provided by `linux.cron.v1` together with
+the release binary `bob-icu-cron-run`; see
+[`docs/CRON-MONITORING.md`](docs/CRON-MONITORING.md).
+
 The optional, privilege-separated OpenClaw WhatsApp health integration is
 documented in [`docs/OPENCLAW-WHATSAPP.md`](docs/OPENCLAW-WHATSAPP.md).
 

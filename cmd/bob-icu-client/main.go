@@ -53,7 +53,18 @@ type Config struct {
 	MaxParallelSensors       int             `json:"max_parallel_sensors"`
 	AgentVersion             string          `json:"agent_version"`
 	Packages                 []string        `json:"packages,omitempty"`
+	CronStateDirectory       string          `json:"cron_state_directory,omitempty"`
+	CronJobs                 []CronJobConfig `json:"cron_jobs,omitempty"`
 	Services                 []ServiceConfig `json:"services"`
+}
+
+type CronJobConfig struct {
+	JobID                   string `json:"job_id"`
+	DisplayName             string `json:"display_name"`
+	ExpectedIntervalSeconds int64  `json:"expected_interval_seconds"`
+	GraceSeconds            int64  `json:"grace_seconds,omitempty"`
+	MaxRuntimeSeconds       int64  `json:"max_runtime_seconds,omitempty"`
+	PollIntervalSeconds     int64  `json:"poll_interval_seconds,omitempty"`
 }
 
 type ServiceConfig struct {
@@ -63,14 +74,15 @@ type ServiceConfig struct {
 }
 
 type SensorConfig struct {
-	SensorID        string   `json:"sensor_id"`
-	DisplayName     string   `json:"display_name"`
-	ValueType       string   `json:"value_type"`
-	Unit            string   `json:"unit,omitempty"`
-	IntervalSeconds int64    `json:"interval_seconds"`
-	TimeoutSeconds  int64    `json:"timeout_seconds"`
-	Builtin         string   `json:"builtin,omitempty"`
-	Command         []string `json:"command,omitempty"`
+	SensorID        string            `json:"sensor_id"`
+	DisplayName     string            `json:"display_name"`
+	ValueType       string            `json:"value_type"`
+	Unit            string            `json:"unit,omitempty"`
+	IntervalSeconds int64             `json:"interval_seconds"`
+	TimeoutSeconds  int64             `json:"timeout_seconds"`
+	Builtin         string            `json:"builtin,omitempty"`
+	BuiltinOptions  map[string]string `json:"builtin_options,omitempty"`
+	Command         []string          `json:"command,omitempty"`
 }
 
 type Client struct {
@@ -212,6 +224,9 @@ func loadConfig(path string) (Config, string, error) {
 	if err := expandPackages(&cfg); err != nil {
 		return cfg, "", err
 	}
+	if err := expandCronJobs(&cfg); err != nil {
+		return cfg, "", err
+	}
 	if !keyRE.MatchString(cfg.SourceID) {
 		return cfg, "", errors.New("invalid source_id")
 	}
@@ -271,6 +286,13 @@ func loadConfig(path string) (Config, string, error) {
 			}
 			if s.Builtin != "" && !knownBuiltin(s.Builtin) {
 				return cfg, "", fmt.Errorf("unknown builtin %q", s.Builtin)
+			}
+			if s.Builtin == "linux.cron_job_state" {
+				if _, err := parseCronSensorOptions(s.BuiltinOptions); err != nil {
+					return cfg, "", fmt.Errorf("invalid cron sensor %s.%s: %w", svc.ServiceID, s.SensorID, err)
+				}
+			} else if len(s.BuiltinOptions) != 0 {
+				return cfg, "", fmt.Errorf("builtin_options are not supported for %s.%s", svc.ServiceID, s.SensorID)
 			}
 		}
 	}
@@ -467,7 +489,7 @@ func (c *Client) runSensor(parent context.Context, svc ServiceConfig, s SensorCo
 
 func executeSensor(ctx context.Context, s SensorConfig) (SensorResult, error) {
 	if s.Builtin != "" {
-		return runBuiltin(ctx, s.Builtin)
+		return runBuiltinSensor(ctx, s)
 	}
 	cmd := exec.CommandContext(ctx, s.Command[0], s.Command[1:]...)
 	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8"}

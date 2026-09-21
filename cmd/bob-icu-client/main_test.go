@@ -17,6 +17,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/thundersteff/bob-icu-client/internal/cronstate"
 )
 
 func validTestConfig(t *testing.T) (string, string) {
@@ -162,10 +164,130 @@ func TestListPackages(t *testing.T) {
 	if err := printPackages(&output); err != nil {
 		t.Fatal(err)
 	}
-	for _, id := range []string{"linux.base.v1", "linux.systemd.v1"} {
+	for _, id := range []string{"linux.base.v1", "linux.cron.v1", "linux.systemd.v1"} {
 		if !strings.Contains(output.String(), id+"\t") {
 			t.Fatalf("package %s missing from output: %s", id, output.String())
 		}
+	}
+}
+
+func TestCronPackageExpandsRegisteredJobs(t *testing.T) {
+	path, _ := validTestConfig(t)
+	var cfg Config
+	if err := decodeFile(path, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Packages = []string{"linux.cron.v1"}
+	cfg.CronStateDirectory = filepath.Join(t.TempDir(), "cron")
+	cfg.CronJobs = []CronJobConfig{{
+		JobID: "nightly_backup", DisplayName: "Nächtliche Sicherung",
+		ExpectedIntervalSeconds: 86400, GraceSeconds: 1800, MaxRuntimeSeconds: 7200,
+	}}
+	cfg.Services = nil
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Services) != 1 || loaded.Services[0].ServiceID != "linux_cron_jobs" || len(loaded.Services[0].Sensors) != 1 {
+		t.Fatalf("unexpected cron catalog: %#v", loaded.Services)
+	}
+	sensor := loaded.Services[0].Sensors[0]
+	if sensor.SensorID != "nightly_backup" || sensor.Builtin != "linux.cron_job_state" || sensor.IntervalSeconds != 60 {
+		t.Fatalf("unexpected cron sensor: %#v", sensor)
+	}
+	if sensor.BuiltinOptions["expected_interval_seconds"] != "86400" || sensor.BuiltinOptions["max_runtime_seconds"] != "7200" {
+		t.Fatalf("unexpected cron options: %#v", sensor.BuiltinOptions)
+	}
+}
+
+func TestCronPackageRejectsUnsafeDefinitions(t *testing.T) {
+	tests := []struct {
+		name     string
+		packages []string
+		jobs     []CronJobConfig
+		contains string
+	}{
+		{name: "jobs without package", jobs: []CronJobConfig{{JobID: "job", DisplayName: "Job", ExpectedIntervalSeconds: 60}}, contains: "require package"},
+		{name: "package without jobs", packages: []string{"linux.cron.v1"}, contains: "requires at least one"},
+		{name: "unsafe id", packages: []string{"linux.cron.v1"}, jobs: []CronJobConfig{{JobID: "../job", DisplayName: "Job", ExpectedIntervalSeconds: 60}}, contains: "invalid or duplicate"},
+		{name: "interval too short", packages: []string{"linux.cron.v1"}, jobs: []CronJobConfig{{JobID: "job", DisplayName: "Job", ExpectedIntervalSeconds: 30}}, contains: "invalid expected interval"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, _ := validTestConfig(t)
+			var cfg Config
+			if err := decodeFile(path, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			cfg.Packages, cfg.CronJobs = tt.packages, tt.jobs
+			cfg.Services = nil
+			data, _ := json.Marshal(cfg)
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := loadConfig(path); err == nil || !strings.Contains(err.Error(), tt.contains) {
+				t.Fatalf("expected %q error, got %v", tt.contains, err)
+			}
+		})
+	}
+}
+
+func TestCronJobStateClassification(t *testing.T) {
+	directory := t.TempDir()
+	options := cronSensorOptions{
+		jobID: "backup", stateDirectory: directory,
+		expectedInterval: time.Hour, grace: 5 * time.Minute, maximumRuntime: 10 * time.Minute,
+	}
+	now := time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC)
+	if got := cronJobStateAt(options, now); got.Value != "warning" {
+		t.Fatalf("missing state=%#v", got)
+	}
+	exitZero, duration := 0, int64(2500)
+	state := cronstate.State{
+		Schema: cronstate.Schema, JobID: "backup", LastStartedAt: now.Add(-30 * time.Minute).Format(time.RFC3339Nano),
+		LastFinishedAt: now.Add(-29 * time.Minute).Format(time.RFC3339Nano), LastSuccessAt: now.Add(-29 * time.Minute).Format(time.RFC3339Nano),
+		LastExitCode: &exitZero, LastDurationMS: &duration,
+	}
+	if err := cronstate.WriteAtomic(directory, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := cronJobStateAt(options, now); got.Value != "healthy" || !strings.Contains(got.Message, "Laufzeit") {
+		t.Fatalf("healthy state=%#v", got)
+	}
+	state.LastSuccessAt = now.Add(-2 * time.Hour).Format(time.RFC3339Nano)
+	if err := cronstate.WriteAtomic(directory, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := cronJobStateAt(options, now); got.Value != "critical" || !strings.Contains(got.Message, "erwartet") {
+		t.Fatalf("overdue state=%#v", got)
+	}
+	exitSeven := 7
+	state.LastFinishedAt = now.Add(-time.Minute).Format(time.RFC3339Nano)
+	state.LastExitCode = &exitSeven
+	if err := cronstate.WriteAtomic(directory, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := cronJobStateAt(options, now); got.Value != "critical" || !strings.Contains(got.Message, "Exit 7") {
+		t.Fatalf("failed state=%#v", got)
+	}
+	state.Running = true
+	state.LastStartedAt = now.Add(-5 * time.Minute).Format(time.RFC3339Nano)
+	if err := cronstate.WriteAtomic(directory, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := cronJobStateAt(options, now); got.Value != "healthy" || !strings.Contains(got.Message, "Läuft") {
+		t.Fatalf("running state=%#v", got)
+	}
+	state.LastStartedAt = now.Add(-20 * time.Minute).Format(time.RFC3339Nano)
+	if err := cronstate.WriteAtomic(directory, state); err != nil {
+		t.Fatal(err)
+	}
+	if got := cronJobStateAt(options, now); got.Value != "critical" || !strings.Contains(got.Message, "Maximum") {
+		t.Fatalf("stuck state=%#v", got)
 	}
 }
 

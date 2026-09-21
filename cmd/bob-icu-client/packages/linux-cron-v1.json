@@ -1,0 +1,11 @@
+{
+  "package_id": "linux.cron.v1",
+  "description": "Standardisierte Erfolgs-, Fehler-, Laufzeit- und Überfälligkeitsüberwachung registrierter Cronjobs",
+  "services": [
+    {
+      "service_id": "linux_cron_jobs",
+      "display_name": "Linux · Cronjobs",
+      "sensors": []
+    }
+  ]
+}

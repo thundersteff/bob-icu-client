@@ -46,6 +46,7 @@ Show the operator this intended delta, adapted to the host:
 
 - system user/group `bob-icu-client` without login shell;
 - `/usr/local/bin/bob-icu-client`;
+- optional `/usr/local/bin/bob-icu-cron-run` when `linux.cron.v1` is used;
 - `/etc/bob-icu/client.json` (`0640`, root:client group);
 - `/etc/bob-icu/client.secret` (`0640`, root:client group);
 - `/var/lib/bob-icu-client` (`0750`, client user/group);
@@ -88,6 +89,11 @@ Never print the secret. A successful client start is not sufficient proof;
 verify on the BOB ICU server that the manifest, heartbeat and readings arrived.
 The configuration check must run as the service account: it opens and migrates
 the SQLite database and deliberately sets its mode to `0600`.
+
+When enabling `linux.cron.v1`, follow
+[`CRON-MONITORING.md`](CRON-MONITORING.md). Existing crontab entries are live
+scheduler configuration and require their own exact proposal, backup and
+approval. Never rewrite a crontab wholesale from an unverified text snapshot.
 
 ## 5. Upgrade and rollback
 

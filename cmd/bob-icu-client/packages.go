@@ -3,10 +3,13 @@ package main
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -79,6 +82,95 @@ func expandPackages(cfg *Config) error {
 		}
 	}
 	cfg.Services = append(expanded, cfg.Services...)
+	return nil
+}
+
+func expandCronJobs(cfg *Config) error {
+	enabled := false
+	for _, packageID := range cfg.Packages {
+		if packageID == "linux.cron.v1" {
+			enabled = true
+			break
+		}
+	}
+	if !enabled {
+		if len(cfg.CronJobs) > 0 {
+			return fmt.Errorf("cron_jobs require package %q", "linux.cron.v1")
+		}
+		return nil
+	}
+	if len(cfg.CronJobs) == 0 {
+		return errors.New("package linux.cron.v1 requires at least one cron job")
+	}
+	if len(cfg.CronJobs) > 32 {
+		return errors.New("cron job limit exceeded")
+	}
+	if cfg.CronStateDirectory == "" {
+		cfg.CronStateDirectory = "/var/lib/bob-icu-cron"
+	}
+	if !filepath.IsAbs(cfg.CronStateDirectory) || filepath.Clean(cfg.CronStateDirectory) == "/" {
+		return errors.New("cron_state_directory must be an absolute non-root path")
+	}
+	serviceIndex := -1
+	for index := range cfg.Services {
+		if cfg.Services[index].ServiceID == "linux_cron_jobs" {
+			serviceIndex = index
+			break
+		}
+	}
+	if serviceIndex < 0 {
+		return errors.New("package linux.cron.v1 has no linux_cron_jobs service")
+	}
+	seen := map[string]bool{}
+	for index := range cfg.CronJobs {
+		job := &cfg.CronJobs[index]
+		if !keyRE.MatchString(job.JobID) || strings.TrimSpace(job.DisplayName) == "" || seen[job.JobID] {
+			return fmt.Errorf("invalid or duplicate cron job %q", job.JobID)
+		}
+		seen[job.JobID] = true
+		if job.ExpectedIntervalSeconds < 60 || job.ExpectedIntervalSeconds > 2678400 {
+			return fmt.Errorf("invalid expected interval for cron job %s", job.JobID)
+		}
+		if job.GraceSeconds == 0 {
+			job.GraceSeconds = job.ExpectedIntervalSeconds / 10
+			if job.GraceSeconds < 300 {
+				job.GraceSeconds = 300
+			}
+			if job.GraceSeconds > 3600 {
+				job.GraceSeconds = 3600
+			}
+		}
+		if job.GraceSeconds < 1 || job.GraceSeconds > job.ExpectedIntervalSeconds {
+			return fmt.Errorf("invalid grace period for cron job %s", job.JobID)
+		}
+		if job.MaxRuntimeSeconds == 0 {
+			job.MaxRuntimeSeconds = job.ExpectedIntervalSeconds
+			if job.MaxRuntimeSeconds > 3600 {
+				job.MaxRuntimeSeconds = 3600
+			}
+		}
+		if job.MaxRuntimeSeconds < 1 || job.MaxRuntimeSeconds > job.ExpectedIntervalSeconds {
+			return fmt.Errorf("invalid maximum runtime for cron job %s", job.JobID)
+		}
+		if job.PollIntervalSeconds == 0 {
+			job.PollIntervalSeconds = 60
+		}
+		if job.PollIntervalSeconds < 10 || job.PollIntervalSeconds > 3600 {
+			return fmt.Errorf("invalid poll interval for cron job %s", job.JobID)
+		}
+		cfg.Services[serviceIndex].Sensors = append(cfg.Services[serviceIndex].Sensors, SensorConfig{
+			SensorID: job.JobID, DisplayName: job.DisplayName, ValueType: "text",
+			IntervalSeconds: job.PollIntervalSeconds, TimeoutSeconds: 5,
+			Builtin: "linux.cron_job_state",
+			BuiltinOptions: map[string]string{
+				"job_id":                    job.JobID,
+				"state_directory":           filepath.Clean(cfg.CronStateDirectory),
+				"expected_interval_seconds": strconv.FormatInt(job.ExpectedIntervalSeconds, 10),
+				"grace_seconds":             strconv.FormatInt(job.GraceSeconds, 10),
+				"max_runtime_seconds":       strconv.FormatInt(job.MaxRuntimeSeconds, 10),
+			},
+		})
+	}
 	return nil
 }
 

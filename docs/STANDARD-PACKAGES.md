@@ -67,13 +67,41 @@ silently reinterpreted.
 | `time_sync_state` | Zeitsynchronisation | text | 300 s |
 | `reboot_required_state` | Neustartbedarf | text | 3600 s |
 
+## `linux.cron.v1`
+
+This dynamic package creates service `linux_cron_jobs` (`Linux · Cronjobs`).
+Each entry in `cron_jobs` becomes one consistently named text-state sensor.
+The signed `bob-icu-cron-run` wrapper writes the authoritative local state.
+
+```json
+{
+  "packages": ["linux.base.v1", "linux.systemd.v1", "linux.cron.v1"],
+  "cron_state_directory": "/var/lib/bob-icu-cron",
+  "cron_jobs": [
+    {
+      "job_id": "nightly_backup",
+      "display_name": "Nächtliche Sicherung",
+      "expected_interval_seconds": 86400,
+      "grace_seconds": 1800,
+      "max_runtime_seconds": 7200,
+      "poll_interval_seconds": 60
+    }
+  ]
+}
+```
+
+The sensor reports one of the server-understood states `healthy`, `warning` or
+`critical`. It distinguishes missing/never-successful state, a currently
+running job, excessive runtime, the last non-zero exit code and an overdue last
+success. Full installation and migration details are in
+[`CRON-MONITORING.md`](CRON-MONITORING.md).
+
 ## Cron scope
 
 `cron_daemon_state` proves whether the system's `cron.service` or
 `crond.service` is active. It cannot prove that every scheduled command ran
-successfully. Critical jobs need an application-specific last-success sensor or
-heartbeat. That separate convention will be introduced as its own versioned
-package instead of overloading the daemon check.
+successfully. Enable `linux.cron.v1` and execute registered jobs through
+`bob-icu-cron-run` for per-job evidence.
 
 ## Compatibility
 

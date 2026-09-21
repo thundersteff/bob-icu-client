@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/thundersteff/bob-icu-client/internal/cronstate"
 	"golang.org/x/sys/unix"
 )
 
@@ -20,10 +21,139 @@ func knownBuiltin(name string) bool {
 		"linux.uptime_seconds", "linux.cpu_used_percent", "linux.load1", "linux.load5", "linux.load15",
 		"linux.memory_used_percent", "linux.memory_available_bytes", "linux.swap_used_percent",
 		"linux.root_disk_used_percent", "linux.root_disk_free_bytes", "linux.root_inode_used_percent", "linux.root_mount_state",
-		"linux.systemd_state", "linux.systemd_failed_units_count", "linux.cron_daemon_state", "linux.time_sync_state", "linux.reboot_required_state":
+		"linux.systemd_state", "linux.systemd_failed_units_count", "linux.cron_daemon_state", "linux.time_sync_state", "linux.reboot_required_state",
+		"linux.cron_job_state":
 		return true
 	}
 	return false
+}
+
+func runBuiltinSensor(ctx context.Context, sensor SensorConfig) (SensorResult, error) {
+	if sensor.Builtin == "linux.cron_job_state" {
+		options, err := parseCronSensorOptions(sensor.BuiltinOptions)
+		if err != nil {
+			return SensorResult{}, err
+		}
+		return cronJobStateAt(options, time.Now().UTC()), nil
+	}
+	return runBuiltin(ctx, sensor.Builtin)
+}
+
+type cronSensorOptions struct {
+	jobID, stateDirectory                   string
+	expectedInterval, grace, maximumRuntime time.Duration
+}
+
+func parseCronSensorOptions(values map[string]string) (cronSensorOptions, error) {
+	var result cronSensorOptions
+	expectedKeys := map[string]bool{
+		"job_id": true, "state_directory": true, "expected_interval_seconds": true,
+		"grace_seconds": true, "max_runtime_seconds": true,
+	}
+	if len(values) != len(expectedKeys) {
+		return result, errors.New("cron sensor options are incomplete")
+	}
+	for key := range values {
+		if !expectedKeys[key] {
+			return result, fmt.Errorf("unknown cron sensor option %q", key)
+		}
+	}
+	result.jobID = values["job_id"]
+	result.stateDirectory = values["state_directory"]
+	if _, err := cronstate.Path(result.stateDirectory, result.jobID); err != nil {
+		return result, err
+	}
+	parseDuration := func(key string) (time.Duration, error) {
+		seconds, err := strconv.ParseInt(values[key], 10, 64)
+		if err != nil || seconds < 1 || seconds > 2678400 {
+			return 0, fmt.Errorf("invalid %s", key)
+		}
+		return time.Duration(seconds) * time.Second, nil
+	}
+	var err error
+	if result.expectedInterval, err = parseDuration("expected_interval_seconds"); err != nil {
+		return result, err
+	}
+	if result.grace, err = parseDuration("grace_seconds"); err != nil {
+		return result, err
+	}
+	if result.maximumRuntime, err = parseDuration("max_runtime_seconds"); err != nil {
+		return result, err
+	}
+	if result.grace > result.expectedInterval || result.maximumRuntime > result.expectedInterval {
+		return result, errors.New("cron grace and maximum runtime must not exceed expected interval")
+	}
+	return result, nil
+}
+
+func cronJobStateAt(options cronSensorOptions, now time.Time) SensorResult {
+	path, _ := cronstate.Path(options.stateDirectory, options.jobID)
+	state, err := cronstate.Read(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return SensorResult{Value: "warning", Message: "Noch kein Lauf protokolliert"}
+	}
+	if err != nil || state.JobID != options.jobID {
+		return SensorResult{Value: "critical", Message: "Cron-Zustandsdatei ist ungültig"}
+	}
+	started, startedOK := parseCronTimestamp(state.LastStartedAt)
+	finished, finishedOK := parseCronTimestamp(state.LastFinishedAt)
+	succeeded, successOK := parseCronTimestamp(state.LastSuccessAt)
+	if state.Running {
+		if !startedOK {
+			return SensorResult{Value: "critical", Message: "Lauf markiert, aber Startzeit fehlt"}
+		}
+		age := now.Sub(started)
+		if age < 0 {
+			return SensorResult{Value: "critical", Message: "Startzeit liegt in der Zukunft"}
+		}
+		if age > options.maximumRuntime {
+			return SensorResult{Value: "critical", Message: fmt.Sprintf("Läuft seit %s; Maximum %s", formatDuration(age), formatDuration(options.maximumRuntime))}
+		}
+		return SensorResult{Value: "healthy", Message: fmt.Sprintf("Läuft seit %s", formatDuration(age))}
+	}
+	if state.LastExitCode != nil && *state.LastExitCode != 0 && finishedOK && (!successOK || finished.After(succeeded)) {
+		return SensorResult{Value: "critical", Message: fmt.Sprintf("Letzter Lauf fehlgeschlagen (Exit %d)", *state.LastExitCode)}
+	}
+	if !successOK {
+		return SensorResult{Value: "warning", Message: "Noch kein erfolgreicher Lauf protokolliert"}
+	}
+	age := now.Sub(succeeded)
+	if age < 0 {
+		return SensorResult{Value: "critical", Message: "Letzter Erfolg liegt in der Zukunft"}
+	}
+	deadline := options.expectedInterval + options.grace
+	if age > deadline {
+		return SensorResult{Value: "critical", Message: fmt.Sprintf("Letzter Erfolg vor %s; erwartet innerhalb %s", formatDuration(age), formatDuration(deadline))}
+	}
+	message := fmt.Sprintf("Letzter Erfolg vor %s", formatDuration(age))
+	if state.LastDurationMS != nil {
+		message += fmt.Sprintf(" · Laufzeit %s", formatDuration(time.Duration(*state.LastDurationMS)*time.Millisecond))
+	}
+	return SensorResult{Value: "healthy", Message: message}
+}
+
+func parseCronTimestamp(value string) (time.Time, bool) {
+	if value == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339Nano, value)
+	return parsed, err == nil
+}
+
+func formatDuration(value time.Duration) string {
+	if value < 0 {
+		value = 0
+	}
+	if value >= 24*time.Hour {
+		return fmt.Sprintf("%d Tagen %d Std", int(value/(24*time.Hour)), int((value%(24*time.Hour))/time.Hour))
+	}
+	if value >= time.Hour {
+		return fmt.Sprintf("%d Std %d Min", int(value/time.Hour), int(value%time.Hour/time.Minute))
+	}
+	if value >= time.Minute {
+		return fmt.Sprintf("%d Min %d Sek", int(value/time.Minute), int(value%time.Minute/time.Second))
+	}
+	return fmt.Sprintf("%d Sek", int(value/time.Second))
 }
 
 func runBuiltin(ctx context.Context, name string) (SensorResult, error) {
