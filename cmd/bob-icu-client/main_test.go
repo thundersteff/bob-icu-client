@@ -404,3 +404,20 @@ func TestQueueCoalescesHeartbeat(t *testing.T) {
 		t.Fatalf("latest heartbeat not retained: %s", item.Body)
 	}
 }
+
+func TestOpenClawPackageExpandsAccountsAndModels(t *testing.T) {
+	cfg := Config{Packages: []string{"openclaw.standard.v1"}, OpenClawAccounts: []OpenClawAccountConfig{{Channel: "whatsapp", AccountID: "default", DisplayName: "WhatsApp"}}, OpenClawModels: []OpenClawModelConfig{{ModelID: "provider/model", DisplayName: "Primary", ActiveProbe: true}}}
+	if err := expandPackages(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	if err := expandOpenClaw(&cfg); err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, service := range cfg.Services {
+		counts[service.ServiceID] = len(service.Sensors)
+	}
+	if counts["openclaw_channels"] != 3 || counts["openclaw_llm"] != 4 {
+		t.Fatalf("unexpected sensors: %#v", counts)
+	}
+}

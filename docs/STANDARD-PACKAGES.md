@@ -31,6 +31,11 @@ Package IDs are immutable contracts. A materially changed catalog is released
 under a new ID such as `linux.base.v2`; an existing `v1` patient is never
 silently reinterpreted.
 
+## `openclaw.standard.v1`
+
+Stable services and sensors for OpenClaw Core, LLM bindings, channel accounts,
+automations and memory. See [OPENCLAW-STANDARD.md](OPENCLAW-STANDARD.md).
+
 ## `linux.base.v1`
 
 ### Service `linux_system` — Linux · System

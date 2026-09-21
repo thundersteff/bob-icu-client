@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+out="${1:-/run/bob-icu-openclaw-status/model-probe.json}"; agent="${2:?agent}"; model="${3:?model}"; oc="${OPENCLAW_BIN:-openclaw}"
+start=$(date +%s%3N); state=critical
+if timeout 120s "$oc" infer model run --gateway --agent "$agent" --model "$model" --thinking off --prompt 'Reply exactly: OK' --json >/dev/null 2>&1; then state=healthy; fi
+end=$(date +%s%3N); tmp=$(mktemp "$(dirname "$out")/.probe.XXXXXX")
+jq -n --arg state "$state" --arg model "$model" --argjson latency "$((end-start))" --argjson at "$(date +%s)" '{state:$state,latency_ms:$latency,model_id:$model,observed_at_epoch:$at}' >"$tmp"
+chmod 0644 "$tmp"; mv -f "$tmp" "$out"; [[ "$state" == healthy ]]

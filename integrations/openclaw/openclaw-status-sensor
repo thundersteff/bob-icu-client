@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+file="${1:?snapshot}"; mode="${2:?mode}"; shift 2
+[[ -r "$file" ]] || { echo 'snapshot unreadable' >&2; exit 1; }
+now=$(date +%s); generated=$(jq -er '.generated_at_epoch|numbers' "$file")
+case "$mode" in
+ field)
+   path="${1:?path}"; max="${2:-120}"; (( now-generated <= max && now>=generated )) || exit 1
+   jq -ec --arg p "$path" 'getpath($p|split(".")) as $v | if $v==null then error("missing") else {value:$v,message:"OK"} end' "$file" ;;
+ account)
+   channel="${1:?channel}"; account="${2:?account}"; max="${3:-120}"; (( now-generated <= max && now>=generated )) || exit 1
+   jq -ec --arg c "$channel" --arg a "$account" '.channels.accounts[]|select(.channel==$c and .account_id==$a)|{value:.state,message:("channel="+.channel+" account="+.account_id)}' "$file" ;;
+ model)
+   model="${1:?model}"; probe="${2:-false}"; max="${3:-120}"; (( now-generated <= max && now>=generated )) || exit 1
+   jq -ec --arg m "$model" --argjson probe "$probe" '.llm.models[]|select(.model_id==$m)|if $probe and .probe_state!="healthy" then {value:.probe_state,message:"active probe"} else {value:.state,message:"catalog/auth"} end' "$file" ;;
+ *) exit 2 ;;
+esac

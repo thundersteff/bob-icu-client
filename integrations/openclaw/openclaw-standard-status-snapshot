@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+out="${1:-/run/bob-icu-openclaw-status/openclaw.json}"
+oc="${OPENCLAW_BIN:-openclaw}"; dir=$(dirname "$out"); mkdir -p "$dir"
+work=$(mktemp -d); trap 'find "$work" -type f -delete; rmdir "$work"' EXIT
+timeout 20s "$oc" status --json >"$work/status"
+timeout 20s "$oc" models status --json >"$work/models"
+timeout 20s "$oc" channels status --json >"$work/channels"
+timeout 20s "$oc" automations status --json >"$work/auto-status"
+timeout 20s "$oc" automations list --json >"$work/auto-list"
+timeout 30s "$oc" memory status --json >"$work/memory"
+probe='{"state":"warning","latency_ms":0,"model_id":"","observed_at_epoch":0}'
+[[ -r /run/bob-icu-openclaw-status/model-probe.json ]] && probe=$(jq -c . /run/bob-icu-openclaw-status/model-probe.json)
+tmp=$(mktemp "$dir/.openclaw.XXXXXX")
+jq -n --argjson now "$(date +%s)" --slurpfile s "$work/status" --slurpfile m "$work/models" --slurpfile c "$work/channels" --slurpfile as "$work/auto-status" --slurpfile al "$work/auto-list" --slurpfile mem "$work/memory" --argjson probe "$probe" '
+ def account_state: if (.enabled//false)==false then "disabled" elif .linked and .running and .connected and .healthState=="healthy" then "healthy" elif (.linked//false)==false or (.connected//false)==false then "critical" else "warning" end;
+ ($c[0].channelAccounts // {} | to_entries | map(.key as $ch | .value[] | {channel:$ch,account_id:.accountId,state:account_state})) as $accounts |
+ ($m[0].resolvedDefault // $m[0].defaultModel // "") as $default |
+ ($m[0].allowed // []) as $allowed |
+ ($m[0].auth.runtimeAuthRoutes // []) as $routes |
+ {schema:"bob-icu.openclaw-standard.v1",generated_at_epoch:$now,
+  core:{gateway_state:(if $s[0].gateway.reachable and $s[0].gatewayService.runtime.state=="active" then "healthy" else "critical" end),gateway_latency_ms:($s[0].gateway.connectLatencyMs//0),gateway_restarts:($s[0].gatewayService.runtime.systemd.nRestarts//0)},
+  llm:{primary_state:(if ($default!="" and ($allowed|index($default))!=null and ($routes|any(.status=="usable"))) then "healthy" else "critical" end),probe_state:(if ($now-$probe.observed_at_epoch)>1200 then "warning" else $probe.state end),probe_latency_ms:$probe.latency_ms,models:($allowed|map(. as $id|{model_id:$id,state:(if ($routes|any(.status=="usable")) then "healthy" else "critical" end),probe_state:(if $id==$probe.model_id then (if ($now-$probe.observed_at_epoch)>1200 then "warning" else $probe.state end) else "not_probed" end)}))},
+  channels:{state:(if ($accounts|length)==0 then "warning" elif ($accounts|all(.state=="healthy" or .state=="disabled")) then "healthy" else "critical" end),unhealthy_count:($accounts|map(select(.state!="healthy" and .state!="disabled"))|length),accounts:$accounts},
+  automations:{state:(if $as[0].enabled and $as[0].triggersEnabled then "healthy" else "critical" end),failed_count:($al[0].jobs|map(select(.enabled and ((.state.lastRunStatus//.lastRunStatus//"")|IN("error","failed","timed_out"))))|length),overdue_count:($al[0].jobs|map(select(.enabled and (.state.nextRunAtMs//.nextRunAtMs//0)>0 and (.state.nextRunAtMs//.nextRunAtMs)<($now*1000-60000)))|length)},
+  memory:{state:(if ($mem[0]|length)>0 and ($mem[0]|all(.status.vector.index.state=="complete" and .audit.invalidEntryCount==0 and .audit.danglingEntryCount==0)) then "healthy" else "warning" end),unhealthy_count:($mem[0]|map(select(.status.vector.index.state!="complete" or .audit.invalidEntryCount>0 or .audit.danglingEntryCount>0))|length)}}' >"$tmp"
+chmod 0644 "$tmp"; mv -f "$tmp" "$out"

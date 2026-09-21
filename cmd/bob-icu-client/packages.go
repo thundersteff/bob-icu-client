@@ -174,6 +174,74 @@ func expandCronJobs(cfg *Config) error {
 	return nil
 }
 
+func expandOpenClaw(cfg *Config) error {
+	enabled := false
+	for _, id := range cfg.Packages {
+		if id == "openclaw.standard.v1" {
+			enabled = true
+		}
+	}
+	if !enabled {
+		if len(cfg.OpenClawAccounts)+len(cfg.OpenClawModels) > 0 {
+			return errors.New("openclaw entities require package openclaw.standard.v1")
+		}
+		return nil
+	}
+	if cfg.OpenClawSnapshotFile == "" {
+		cfg.OpenClawSnapshotFile = "/run/bob-icu-openclaw-status/openclaw.json"
+	}
+	if !filepath.IsAbs(cfg.OpenClawSnapshotFile) {
+		return errors.New("openclaw_snapshot_file must be absolute")
+	}
+	helper := "/usr/local/libexec/bob-icu/openclaw-status-sensor"
+	indices := map[string]int{}
+	for i := range cfg.Services {
+		indices[cfg.Services[i].ServiceID] = i
+		for j := range cfg.Services[i].Sensors {
+			cmd := cfg.Services[i].Sensors[j].Command
+			if len(cmd) >= 2 && cmd[0] == helper {
+				cfg.Services[i].Sensors[j].Command[1] = cfg.OpenClawSnapshotFile
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, account := range cfg.OpenClawAccounts {
+		if !keyRE.MatchString(account.Channel) || !keyRE.MatchString(account.AccountID) || strings.TrimSpace(account.DisplayName) == "" {
+			return fmt.Errorf("invalid OpenClaw account %q/%q", account.Channel, account.AccountID)
+		}
+		id := "account_" + account.Channel + "_" + account.AccountID
+		if !keyRE.MatchString(id) || seen[id] {
+			return fmt.Errorf("invalid or duplicate OpenClaw account sensor %q", id)
+		}
+		seen[id] = true
+		i, ok := indices["openclaw_channels"]
+		if !ok {
+			return errors.New("OpenClaw package missing channel service")
+		}
+		cfg.Services[i].Sensors = append(cfg.Services[i].Sensors, SensorConfig{SensorID: id, DisplayName: account.DisplayName, ValueType: "text", IntervalSeconds: 60, TimeoutSeconds: 10, Command: []string{helper, cfg.OpenClawSnapshotFile, "account", account.Channel, account.AccountID, "120"}})
+	}
+	for _, model := range cfg.OpenClawModels {
+		if !keyRE.MatchString(strings.ReplaceAll(model.ModelID, "/", ".")) || strings.TrimSpace(model.DisplayName) == "" {
+			return fmt.Errorf("invalid OpenClaw model %q", model.ModelID)
+		}
+		id := "model_" + strings.ReplaceAll(model.ModelID, "/", "_")
+		if !keyRE.MatchString(id) || seen[id] {
+			return fmt.Errorf("invalid or duplicate OpenClaw model sensor %q", id)
+		}
+		seen[id] = true
+		i, ok := indices["openclaw_llm"]
+		if !ok {
+			return errors.New("OpenClaw package missing LLM service")
+		}
+		probe := "false"
+		if model.ActiveProbe {
+			probe = "true"
+		}
+		cfg.Services[i].Sensors = append(cfg.Services[i].Sensors, SensorConfig{SensorID: id, DisplayName: model.DisplayName, ValueType: "text", IntervalSeconds: 60, TimeoutSeconds: 10, Command: []string{helper, cfg.OpenClawSnapshotFile, "model", model.ModelID, probe, "120"}})
+	}
+	return nil
+}
+
 func printPackages(w io.Writer) error {
 	packages, err := loadPackages()
 	if err != nil {

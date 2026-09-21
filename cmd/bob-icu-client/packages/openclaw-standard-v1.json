@@ -1,0 +1,29 @@
+{
+  "package_id": "openclaw.standard.v1",
+  "description": "OpenClaw-Standardüberwachung für Gateway, LLM, Kanäle, Automationen und Memory",
+  "services": [
+    {"service_id":"openclaw_core","display_name":"OpenClaw · Core","sensors":[
+      {"sensor_id":"gateway_state","display_name":"Gateway","value_type":"text","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","core.gateway_state","120"]},
+      {"sensor_id":"gateway_latency_ms","display_name":"Gateway-Antwortzeit","value_type":"number","unit":"milliseconds","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","core.gateway_latency_ms","120"]},
+      {"sensor_id":"gateway_restarts","display_name":"Gateway-Neustarts","value_type":"number","unit":"count","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","core.gateway_restarts","120"]}
+    ]},
+    {"service_id":"openclaw_llm","display_name":"OpenClaw · LLM","sensors":[
+      {"sensor_id":"primary_model_state","display_name":"Primäres Modell","value_type":"text","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","llm.primary_state","120"]},
+      {"sensor_id":"active_probe_state","display_name":"Aktiver Modelltest","value_type":"text","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","llm.probe_state","120"]},
+      {"sensor_id":"active_probe_latency_ms","display_name":"Modelltest-Antwortzeit","value_type":"number","unit":"milliseconds","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","llm.probe_latency_ms","120"]}
+    ]},
+    {"service_id":"openclaw_channels","display_name":"OpenClaw · Kanäle","sensors":[
+      {"sensor_id":"channels_state","display_name":"Kanäle gesamt","value_type":"text","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","channels.state","120"]},
+      {"sensor_id":"unhealthy_count","display_name":"Gestörte Konten","value_type":"number","unit":"count","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","channels.unhealthy_count","120"]}
+    ]},
+    {"service_id":"openclaw_automations","display_name":"OpenClaw · Automationen","sensors":[
+      {"sensor_id":"scheduler_state","display_name":"Scheduler","value_type":"text","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","automations.state","120"]},
+      {"sensor_id":"failed_jobs","display_name":"Fehlgeschlagene Jobs","value_type":"number","unit":"count","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","automations.failed_count","120"]},
+      {"sensor_id":"overdue_jobs","display_name":"Überfällige Jobs","value_type":"number","unit":"count","interval_seconds":60,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","automations.overdue_count","120"]}
+    ]},
+    {"service_id":"openclaw_memory","display_name":"OpenClaw · Memory","sensors":[
+      {"sensor_id":"memory_state","display_name":"Memory","value_type":"text","interval_seconds":300,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","memory.state","360"]},
+      {"sensor_id":"unhealthy_agents","display_name":"Gestörte Memory-Indizes","value_type":"number","unit":"count","interval_seconds":300,"timeout_seconds":10,"command":["/usr/local/libexec/bob-icu/openclaw-status-sensor","/run/bob-icu-openclaw-status/openclaw.json","field","memory.unhealthy_count","360"]}
+    ]}
+  ]
+}

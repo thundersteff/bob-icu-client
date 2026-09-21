@@ -1,0 +1,21 @@
+[Unit]
+Description=BOB ICU minimal OpenClaw model probe
+After=openclaw-gateway.service
+
+[Service]
+Type=oneshot
+User=bar
+Group=bar
+RuntimeDirectory=bob-icu-openclaw-status
+RuntimeDirectoryMode=0755
+RuntimeDirectoryPreserve=yes
+Environment=NODE_OPTIONS=--jitless
+EnvironmentFile=/etc/bob-icu-openclaw/model-probe.env
+ExecStart=/usr/local/libexec/bob-icu/openclaw-model-probe /run/bob-icu-openclaw-status/model-probe.json ${OPENCLAW_AGENT} ${OPENCLAW_MODEL}
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+MemoryDenyWriteExecute=true
+RestrictSUIDSGID=true
+LockPersonality=true

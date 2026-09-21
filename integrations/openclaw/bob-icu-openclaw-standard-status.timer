@@ -1,0 +1,11 @@
+[Unit]
+Description=Refresh BOB ICU OpenClaw standard status
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Persistent=true
+
+[Install]
+WantedBy=timers.target

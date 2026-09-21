@@ -43,19 +43,34 @@ var (
 const protocolSchema = "monitor.v1"
 
 type Config struct {
-	Endpoint                 string          `json:"endpoint"`
-	SourceID                 string          `json:"source_id"`
-	SecretFile               string          `json:"secret_file"`
-	StateDatabase            string          `json:"state_database"`
-	HeartbeatIntervalSeconds int64           `json:"heartbeat_interval_seconds"`
-	RequestTimeoutSeconds    int64           `json:"request_timeout_seconds"`
-	MaxQueueItems            int             `json:"max_queue_items"`
-	MaxParallelSensors       int             `json:"max_parallel_sensors"`
-	AgentVersion             string          `json:"agent_version"`
-	Packages                 []string        `json:"packages,omitempty"`
-	CronStateDirectory       string          `json:"cron_state_directory,omitempty"`
-	CronJobs                 []CronJobConfig `json:"cron_jobs,omitempty"`
-	Services                 []ServiceConfig `json:"services"`
+	Endpoint                 string                  `json:"endpoint"`
+	SourceID                 string                  `json:"source_id"`
+	SecretFile               string                  `json:"secret_file"`
+	StateDatabase            string                  `json:"state_database"`
+	HeartbeatIntervalSeconds int64                   `json:"heartbeat_interval_seconds"`
+	RequestTimeoutSeconds    int64                   `json:"request_timeout_seconds"`
+	MaxQueueItems            int                     `json:"max_queue_items"`
+	MaxParallelSensors       int                     `json:"max_parallel_sensors"`
+	AgentVersion             string                  `json:"agent_version"`
+	Packages                 []string                `json:"packages,omitempty"`
+	CronStateDirectory       string                  `json:"cron_state_directory,omitempty"`
+	CronJobs                 []CronJobConfig         `json:"cron_jobs,omitempty"`
+	OpenClawSnapshotFile     string                  `json:"openclaw_snapshot_file,omitempty"`
+	OpenClawAccounts         []OpenClawAccountConfig `json:"openclaw_accounts,omitempty"`
+	OpenClawModels           []OpenClawModelConfig   `json:"openclaw_models,omitempty"`
+	Services                 []ServiceConfig         `json:"services"`
+}
+
+type OpenClawAccountConfig struct {
+	Channel     string `json:"channel"`
+	AccountID   string `json:"account_id"`
+	DisplayName string `json:"display_name"`
+}
+
+type OpenClawModelConfig struct {
+	ModelID     string `json:"model_id"`
+	DisplayName string `json:"display_name"`
+	ActiveProbe bool   `json:"active_probe,omitempty"`
 }
 
 type CronJobConfig struct {
@@ -225,6 +240,9 @@ func loadConfig(path string) (Config, string, error) {
 		return cfg, "", err
 	}
 	if err := expandCronJobs(&cfg); err != nil {
+		return cfg, "", err
+	}
+	if err := expandOpenClaw(&cfg); err != nil {
 		return cfg, "", err
 	}
 	if !keyRE.MatchString(cfg.SourceID) {
