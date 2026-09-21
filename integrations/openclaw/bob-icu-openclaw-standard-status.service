@@ -10,6 +10,8 @@ RuntimeDirectory=bob-icu-openclaw-status
 RuntimeDirectoryMode=0755
 RuntimeDirectoryPreserve=yes
 Environment=NODE_OPTIONS=--jitless
+Environment=OPENCLAW_BIN=/home/bar/.npm-global/bin/openclaw
+Environment=XDG_CACHE_HOME=/tmp
 ExecStart=/usr/local/libexec/bob-icu/openclaw-standard-status-snapshot
 NoNewPrivileges=true
 PrivateTmp=true

@@ -10,6 +10,8 @@ RuntimeDirectory=bob-icu-openclaw-status
 RuntimeDirectoryMode=0755
 RuntimeDirectoryPreserve=yes
 Environment=NODE_OPTIONS=--jitless
+Environment=OPENCLAW_BIN=/home/bar/.npm-global/bin/openclaw
+Environment=XDG_CACHE_HOME=/tmp
 EnvironmentFile=/etc/bob-icu-openclaw/model-probe.env
 ExecStart=/usr/local/libexec/bob-icu/openclaw-model-probe /run/bob-icu-openclaw-status/model-probe.json ${OPENCLAW_AGENT} ${OPENCLAW_MODEL}
 NoNewPrivileges=true
