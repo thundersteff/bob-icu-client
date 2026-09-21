@@ -351,13 +351,45 @@ func filesystemMetric(metric string) (SensorResult, error) {
 		}
 		return SensorResult{Value: 100 * float64(st.Files-st.Ffree) / float64(st.Files), Message: "OK"}, nil
 	case "mount_state":
-		if st.Flags&unix.ST_RDONLY != 0 {
+		readOnly, err := rootMountReadOnly("/proc/1/mountinfo")
+		if err != nil {
+			return SensorResult{}, err
+		}
+		if readOnly {
 			return SensorResult{Value: "read_only", Message: "Root-Dateisystem ist schreibgeschützt"}, nil
 		}
 		return SensorResult{Value: "healthy", Message: "Root-Dateisystem ist beschreibbar"}, nil
 	default:
 		return SensorResult{}, errors.New("unknown filesystem metric")
 	}
+}
+
+func rootMountReadOnly(path string) (bool, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return false, err
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 6 || fields[4] != "/" {
+			continue
+		}
+		for _, option := range strings.Split(fields[5], ",") {
+			switch option {
+			case "rw":
+				return false, nil
+			case "ro":
+				return true, nil
+			}
+		}
+		return false, errors.New("root mount has neither rw nor ro option")
+	}
+	if err := scanner.Err(); err != nil {
+		return false, err
+	}
+	return false, errors.New("root mount not found in PID 1 mountinfo")
 }
 
 func commandOutput(ctx context.Context, command string, args ...string) (string, error) {

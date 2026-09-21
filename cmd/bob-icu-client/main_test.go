@@ -318,6 +318,28 @@ func TestRootMountStateBuiltinReturnsText(t *testing.T) {
 	}
 }
 
+func TestRootMountReadOnlyUsesTargetNamespace(t *testing.T) {
+	for _, tc := range []struct {
+		name, options string
+		want          bool
+	}{{"rw", "rw,relatime", false}, {"ro", "ro,relatime", true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "mountinfo")
+			line := "36 25 8:1 / / " + tc.options + " shared:1 - ext4 /dev/root rw\n"
+			if err := os.WriteFile(path, []byte(line), 0600); err != nil {
+				t.Fatal(err)
+			}
+			got, err := rootMountReadOnly(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Fatalf("got %v want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSystemdBuiltinsReturnTypedValuesWhenAvailable(t *testing.T) {
 	if _, err := os.Stat("/run/systemd/system"); err != nil {
 		t.Skip("systemd is not running")
