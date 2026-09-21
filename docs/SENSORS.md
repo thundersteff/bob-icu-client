@@ -10,6 +10,10 @@ seconds. A timeout must be shorter than the interval.
 
 ## Built-in sensors
 
+For new Linux patients, prefer the versioned packages in
+[`STANDARD-PACKAGES.md`](STANDARD-PACKAGES.md). The following legacy built-ins
+remain supported so existing configurations continue to work:
+
 | Name | Value | Unit recommendation |
 | --- | --- | --- |
 | `host.uptime_seconds` | Linux uptime | `seconds` |

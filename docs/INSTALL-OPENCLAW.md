@@ -54,7 +54,9 @@ Show the operator this intended delta, adapted to the host:
 - no inbound firewall rule and no OpenClaw restart.
 
 The operator must provide or approve the source ID, ingest origin, credential
-handoff and initial sensor catalog.
+handoff and initial sensor catalog. For Linux patients, start from the embedded
+`linux.base.v1` and `linux.systemd.v1` packages instead of recreating their
+sensors manually; see [`STANDARD-PACKAGES.md`](STANDARD-PACKAGES.md).
 
 ## 4. Install after approval
 

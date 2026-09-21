@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -98,14 +99,124 @@ func TestLoadConfigRejectsServiceLimit(t *testing.T) {
 	}
 }
 
+func TestStandardPackagesExpandWithStableCatalog(t *testing.T) {
+	path, _ := validTestConfig(t)
+	var cfg Config
+	if err := decodeFile(path, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg.Packages = []string{"linux.base.v1", "linux.systemd.v1"}
+	cfg.Services = nil
+	data, _ := json.Marshal(cfg)
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, _, err := loadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(loaded.Services) != 3 {
+		t.Fatalf("services=%d, want 3", len(loaded.Services))
+	}
+	wantCounts := map[string]int{"linux_system": 8, "linux_storage": 4, "linux_services": 5}
+	for _, svc := range loaded.Services {
+		if len(svc.Sensors) != wantCounts[svc.ServiceID] {
+			t.Fatalf("%s sensors=%d, want %d", svc.ServiceID, len(svc.Sensors), wantCounts[svc.ServiceID])
+		}
+	}
+}
+
+func TestStandardPackagesRejectUnknownDuplicateAndConflictingEntries(t *testing.T) {
+	tests := []struct {
+		name     string
+		packages []string
+		services []ServiceConfig
+		contains string
+	}{
+		{name: "unknown", packages: []string{"linux.future.v9"}, contains: "unknown package"},
+		{name: "duplicate", packages: []string{"linux.base.v1", "linux.base.v1"}, contains: "duplicate package"},
+		{name: "service conflict", packages: []string{"linux.base.v1"}, services: []ServiceConfig{{ServiceID: "linux_system", DisplayName: "Custom"}}, contains: "conflicts with service"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path, _ := validTestConfig(t)
+			var cfg Config
+			if err := decodeFile(path, &cfg); err != nil {
+				t.Fatal(err)
+			}
+			cfg.Packages = tt.packages
+			cfg.Services = tt.services
+			data, _ := json.Marshal(cfg)
+			if err := os.WriteFile(path, data, 0600); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := loadConfig(path); err == nil || !strings.Contains(err.Error(), tt.contains) {
+				t.Fatalf("expected %q error, got %v", tt.contains, err)
+			}
+		})
+	}
+}
+
+func TestListPackages(t *testing.T) {
+	var output bytes.Buffer
+	if err := printPackages(&output); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []string{"linux.base.v1", "linux.systemd.v1"} {
+		if !strings.Contains(output.String(), id+"\t") {
+			t.Fatalf("package %s missing from output: %s", id, output.String())
+		}
+	}
+}
+
 func TestBuiltinsReturnFiniteNumbers(t *testing.T) {
-	for _, name := range []string{"host.uptime_seconds", "host.load1", "host.memory_available_percent", "host.root_disk_used_percent"} {
-		result, err := runBuiltin(name)
+	for _, name := range []string{
+		"host.uptime_seconds", "host.load1", "host.memory_available_percent", "host.root_disk_used_percent",
+		"linux.uptime_seconds", "linux.cpu_used_percent", "linux.load1", "linux.load5", "linux.load15",
+		"linux.memory_used_percent", "linux.memory_available_bytes", "linux.swap_used_percent",
+		"linux.root_disk_used_percent", "linux.root_disk_free_bytes", "linux.root_inode_used_percent",
+	} {
+		result, err := runBuiltin(context.Background(), name)
 		if err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if _, err := normalizeValue("number", result.Value); err != nil {
 			t.Fatalf("%s: %v", name, err)
+		}
+	}
+}
+
+func TestRootMountStateBuiltinReturnsText(t *testing.T) {
+	result, err := runBuiltin(context.Background(), "linux.root_mount_state")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := normalizeValue("text", result.Value); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSystemdBuiltinsReturnTypedValuesWhenAvailable(t *testing.T) {
+	if _, err := os.Stat("/run/systemd/system"); err != nil {
+		t.Skip("systemd is not running")
+	}
+	tests := []struct {
+		name string
+		kind string
+	}{
+		{"linux.systemd_state", "text"},
+		{"linux.systemd_failed_units_count", "number"},
+		{"linux.cron_daemon_state", "text"},
+		{"linux.time_sync_state", "text"},
+		{"linux.reboot_required_state", "text"},
+	}
+	for _, tt := range tests {
+		result, err := runBuiltin(context.Background(), tt.name)
+		if err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
+		}
+		if _, err := normalizeValue(tt.kind, result.Value); err != nil {
+			t.Fatalf("%s: %v", tt.name, err)
 		}
 	}
 }

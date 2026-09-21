@@ -1,0 +1,30 @@
+{
+  "package_id": "linux.base.v1",
+  "description": "Linux-Basiswerte für CPU, Last, Arbeitsspeicher, Swap und Root-Dateisystem",
+  "services": [
+    {
+      "service_id": "linux_system",
+      "display_name": "Linux · System",
+      "sensors": [
+        {"sensor_id":"uptime_seconds","display_name":"Betriebszeit","value_type":"number","unit":"seconds","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.uptime_seconds"},
+        {"sensor_id":"cpu_used_percent","display_name":"CPU-Auslastung","value_type":"number","unit":"percent","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.cpu_used_percent"},
+        {"sensor_id":"load_1","display_name":"Systemlast · 1 Minute","value_type":"number","unit":"load","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.load1"},
+        {"sensor_id":"load_5","display_name":"Systemlast · 5 Minuten","value_type":"number","unit":"load","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.load5"},
+        {"sensor_id":"load_15","display_name":"Systemlast · 15 Minuten","value_type":"number","unit":"load","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.load15"},
+        {"sensor_id":"memory_used_percent","display_name":"Arbeitsspeicher belegt","value_type":"number","unit":"percent","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.memory_used_percent"},
+        {"sensor_id":"memory_available_bytes","display_name":"Arbeitsspeicher verfügbar","value_type":"number","unit":"bytes","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.memory_available_bytes"},
+        {"sensor_id":"swap_used_percent","display_name":"Swap belegt","value_type":"number","unit":"percent","interval_seconds":60,"timeout_seconds":5,"builtin":"linux.swap_used_percent"}
+      ]
+    },
+    {
+      "service_id": "linux_storage",
+      "display_name": "Linux · Speicher",
+      "sensors": [
+        {"sensor_id":"root_used_percent","display_name":"Root-Dateisystem belegt","value_type":"number","unit":"percent","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.root_disk_used_percent"},
+        {"sensor_id":"root_free_bytes","display_name":"Root-Dateisystem frei","value_type":"number","unit":"bytes","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.root_disk_free_bytes"},
+        {"sensor_id":"root_inode_used_percent","display_name":"Root-Inodes belegt","value_type":"number","unit":"percent","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.root_inode_used_percent"},
+        {"sensor_id":"root_mount_state","display_name":"Root-Dateisystem Zustand","value_type":"text","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.root_mount_state"}
+      ]
+    }
+  ]
+}

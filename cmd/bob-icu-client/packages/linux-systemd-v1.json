@@ -1,0 +1,17 @@
+{
+  "package_id": "linux.systemd.v1",
+  "description": "Linux-Betriebszustand für systemd, fehlerhafte Units, Cron, NTP und Neustartbedarf",
+  "services": [
+    {
+      "service_id": "linux_services",
+      "display_name": "Linux · Dienste",
+      "sensors": [
+        {"sensor_id":"systemd_state","display_name":"systemd-Zustand","value_type":"text","interval_seconds":60,"timeout_seconds":10,"builtin":"linux.systemd_state"},
+        {"sensor_id":"systemd_failed_units_count","display_name":"Fehlerhafte systemd-Units","value_type":"number","unit":"count","interval_seconds":60,"timeout_seconds":10,"builtin":"linux.systemd_failed_units_count"},
+        {"sensor_id":"cron_daemon_state","display_name":"Cron-Dienst","value_type":"text","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.cron_daemon_state"},
+        {"sensor_id":"time_sync_state","display_name":"Zeitsynchronisation","value_type":"text","interval_seconds":300,"timeout_seconds":10,"builtin":"linux.time_sync_state"},
+        {"sensor_id":"reboot_required_state","display_name":"Neustartbedarf","value_type":"text","interval_seconds":3600,"timeout_seconds":10,"builtin":"linux.reboot_required_state"}
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ the BOB ICU ingest API, and sends an independent heartbeat every 60 seconds.
 
 - one statically linked Go binary
 - internal interval scheduler; no cron dependency
+- embedded, versioned standard packages with stable names and sensor IDs
 - built-in host sensors and strictly defined external command sensors
 - durable SQLite/WAL outbox for temporary network or server outages
 - HTTPS plus HMAC-SHA256 request authentication
@@ -27,6 +28,11 @@ The supported installation path is documented in
 [`docs/INSTALL-OPENCLAW.md`](docs/INSTALL-OPENCLAW.md). Sensor definitions and
 the external-command contract are documented in
 [`docs/SENSORS.md`](docs/SENSORS.md).
+
+Linux patients should use the versioned standard packages documented in
+[`docs/STANDARD-PACKAGES.md`](docs/STANDARD-PACKAGES.md). They provide one
+consistent catalog across installations without downloading mutable sensor
+definitions at runtime.
 
 The optional, privilege-separated OpenClaw WhatsApp health integration is
 documented in [`docs/OPENCLAW-WHATSAPP.md`](docs/OPENCLAW-WHATSAPP.md).

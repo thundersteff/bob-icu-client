@@ -7,21 +7,9 @@
   "request_timeout_seconds": 20,
   "max_queue_items": 10000,
   "max_parallel_sensors": 4,
-  "services": [
-    {
-      "service_id": "host",
-      "display_name": "Host",
-      "sensors": [
-        {
-          "sensor_id": "uptime_seconds",
-          "display_name": "Uptime",
-          "value_type": "number",
-          "unit": "seconds",
-          "interval_seconds": 60,
-          "timeout_seconds": 5,
-          "builtin": "host.uptime_seconds"
-        }
-      ]
-    }
-  ]
+  "packages": [
+    "linux.base.v1",
+    "linux.systemd.v1"
+  ],
+  "services": []
 }

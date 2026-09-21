@@ -52,6 +52,7 @@ type Config struct {
 	MaxQueueItems            int             `json:"max_queue_items"`
 	MaxParallelSensors       int             `json:"max_parallel_sensors"`
 	AgentVersion             string          `json:"agent_version"`
+	Packages                 []string        `json:"packages,omitempty"`
 	Services                 []ServiceConfig `json:"services"`
 }
 
@@ -148,10 +149,18 @@ type queuedItem struct {
 func main() {
 	configPath := flag.String("config", "/etc/bob-icu/client.json", "configuration file")
 	check := flag.Bool("check-config", false, "validate configuration, secret and state database")
+	listPackages := flag.Bool("list-packages", false, "list embedded standard packages and exit")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 	if *showVersion {
 		fmt.Printf("bob-icu-client %s (%s) %s/%s\n", version, commit, runtime.GOOS, runtime.GOARCH)
+		return
+	}
+	if *listPackages {
+		if err := printPackages(os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -199,6 +208,9 @@ func loadConfig(path string) (Config, string, error) {
 	}
 	if cfg.AgentVersion == "" {
 		cfg.AgentVersion = version
+	}
+	if err := expandPackages(&cfg); err != nil {
+		return cfg, "", err
 	}
 	if !keyRE.MatchString(cfg.SourceID) {
 		return cfg, "", errors.New("invalid source_id")
@@ -455,7 +467,7 @@ func (c *Client) runSensor(parent context.Context, svc ServiceConfig, s SensorCo
 
 func executeSensor(ctx context.Context, s SensorConfig) (SensorResult, error) {
 	if s.Builtin != "" {
-		return runBuiltin(s.Builtin)
+		return runBuiltin(ctx, s.Builtin)
 	}
 	cmd := exec.CommandContext(ctx, s.Command[0], s.Command[1:]...)
 	cmd.Env = []string{"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8"}
@@ -472,62 +484,6 @@ func executeSensor(ctx context.Context, s SensorConfig) (SensorResult, error) {
 		return SensorResult{}, fmt.Errorf("invalid sensor JSON: %w", err)
 	}
 	return result, nil
-}
-
-func knownBuiltin(name string) bool {
-	switch name {
-	case "host.uptime_seconds", "host.load1", "host.memory_available_percent", "host.root_disk_used_percent":
-		return true
-	}
-	return false
-}
-func runBuiltin(name string) (SensorResult, error) {
-	switch name {
-	case "host.uptime_seconds":
-		b, e := os.ReadFile("/proc/uptime")
-		if e != nil {
-			return SensorResult{}, e
-		}
-		f := strings.Fields(string(b))
-		v, e := strconv.ParseFloat(f[0], 64)
-		return SensorResult{Value: v, Message: "OK"}, e
-	case "host.load1":
-		b, e := os.ReadFile("/proc/loadavg")
-		if e != nil {
-			return SensorResult{}, e
-		}
-		f := strings.Fields(string(b))
-		v, e := strconv.ParseFloat(f[0], 64)
-		return SensorResult{Value: v, Message: "OK"}, e
-	case "host.memory_available_percent":
-		b, e := os.ReadFile("/proc/meminfo")
-		if e != nil {
-			return SensorResult{}, e
-		}
-		vals := map[string]float64{}
-		for _, line := range strings.Split(string(b), "\n") {
-			f := strings.Fields(line)
-			if len(f) >= 2 {
-				v, _ := strconv.ParseFloat(f[1], 64)
-				vals[strings.TrimSuffix(f[0], ":")] = v
-			}
-		}
-		if vals["MemTotal"] <= 0 {
-			return SensorResult{}, errors.New("MemTotal missing")
-		}
-		return SensorResult{Value: 100 * vals["MemAvailable"] / vals["MemTotal"], Message: "OK"}, nil
-	case "host.root_disk_used_percent":
-		var st syscall.Statfs_t
-		if e := syscall.Statfs("/", &st); e != nil {
-			return SensorResult{}, e
-		}
-		total := float64(st.Blocks)
-		if total <= 0 {
-			return SensorResult{}, errors.New("filesystem block count is zero")
-		}
-		return SensorResult{Value: 100 * (total - float64(st.Bavail)) / total, Message: "OK"}, nil
-	}
-	return SensorResult{}, errors.New("unknown builtin")
 }
 
 func normalizeValue(kind string, v any) (any, error) {
