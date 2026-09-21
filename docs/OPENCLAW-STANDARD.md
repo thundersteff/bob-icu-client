@@ -20,7 +20,7 @@ prompts, answers, chats, allowlists, session identifiers or job payloads.
 Install the helpers and systemd units from `integrations/openclaw`. Configure
 `/etc/bob-icu-openclaw/model-probe.env` (mode `0600`) with `OPENCLAW_AGENT` and
 `OPENCLAW_MODEL`. The status snapshot runs every minute. The minimal real model
-probe runs every 15 minutes and consumes provider quota. After 20 minutes
+probe runs every 60 minutes and consumes provider quota. After 75 minutes
 without a fresh result it becomes warning.
 
 Channel sensors prove OpenClaw's local linked/running/connected state. True
